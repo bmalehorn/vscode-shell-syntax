@@ -5,12 +5,9 @@ import { homedir } from "os";
 import * as vscode from "vscode";
 import {
   Diagnostic,
-  DocumentFormattingEditProvider,
-  DocumentRangeFormattingEditProvider,
   ExtensionContext,
   Range,
   TextDocument,
-  TextEdit,
   Uri,
   WorkspaceFolder,
 } from "vscode";
@@ -36,9 +33,7 @@ export const activate = async (context: ExtensionContext): Promise<any> => {
  * @param context The extension context
  */
 const startLinting = (context: ExtensionContext): void => {
-  const diagnostics = vscode.languages.createDiagnosticCollection(
-    "bash",
-  );
+  const diagnostics = vscode.languages.createDiagnosticCollection("bash");
   context.subscriptions.push(diagnostics);
 
   const lint = async (document: TextDocument) => {
@@ -56,7 +51,7 @@ const startLinting = (context: ExtensionContext): void => {
         diagnostics.delete(document.uri);
         return;
       }
-      diagnostics.set(document.uri, d as Diagnostic[]);
+      diagnostics.set(document.uri, d);
     }
   };
 
@@ -82,17 +77,12 @@ const startLinting = (context: ExtensionContext): void => {
 const bashOutputToDiagnostics = (
   document: TextDocument,
   output: string,
-): ReadonlyArray<Diagnostic> => {
+): Array<Diagnostic> => {
   const diagnostics: Array<Diagnostic> = [];
-  const matches = getMatches(/^(.+) \(line (\d+)\): (.+)$/gm, output);
+  const matches = getMatches(/^(.+): line (\d+): (.+)$/, output);
   for (const match of matches) {
-    const fileName = match[1];
     const lineNumber = Number.parseInt(match[2]);
     const message = match[3];
-
-    if (expandUser(fileName).toString !== document.uri.toString) {
-      continue;
-    }
 
     const range = document.validateRange(
       new Range(lineNumber - 1, 0, lineNumber - 1, Number.MAX_VALUE),
@@ -233,13 +223,14 @@ const runInWorkspace = (
 const getMatches = (
   pattern: RegExp,
   text: string,
-): ReadonlyArray<RegExpExecArray> => {
-  const results = [];
-  // We need to loop through the regexp here, so a let is required
-  let match = pattern.exec(text);
-  while (match !== null) {
-    results.push(match);
-    match = pattern.exec(text);
+): ReadonlyArray<RegExpMatchArray> => {
+  const out: Array<RegExpMatchArray> = [];
+  const lines = text.split("\n");
+  for (const line of lines) {
+    const match = line.match(pattern);
+    if (match) {
+      out.push(match);
+    }
   }
-  return results;
+  return out;
 };
