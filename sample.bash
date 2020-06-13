@@ -1,3 +1,8 @@
-echo "hello $USER"
 
-fi
+
+function foo() {
+  if [ -f file.txt ]; then
+    echo hello
+  fi
+}
+

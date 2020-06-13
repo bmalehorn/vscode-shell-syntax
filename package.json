@@ -1,31 +1,33 @@
 {
   "name": "shell-syntax",
   "displayName": "Shell Syntax",
-	"description": "Lint syntax errors in bash & zsh",
-	"publisher": "bmalehorn",
+  "description": "Lint syntax errors in bash, zsh, and sh",
+  "publisher": "bmalehorn",
   "license": "MIT",
   "repository": {
-    "url": "https://github.com/bmalehorn/vscode-fish"
+    "url": "https://github.com/bmalehorn/vscode-shell-syntax"
   },
-  "version": "0.0.1",
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.46.0"
   },
+  "icon": "icon.png",
   "categories": [
-		"Linters"
+    "Linters",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "bash",
+    "zsh",
+    "fish",
+    "shell",
+    "syntax",
+    "lint"
   ],
   "activationEvents": [
-		"onLanguage:shellscript"
+    "onLanguage:shellscript"
   ],
   "main": "./out/extension.js",
-  "contributes": {
-    "commands": [
-      {
-        "command": "shell-syntax.helloWorld",
-        "title": "Hello World"
-      }
-    ]
-  },
   "scripts": {
     "vscode:prepublish": "yarn run compile",
     "compile": "tsc -p ./",
