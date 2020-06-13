@@ -43,19 +43,33 @@ const startLinting = (context: ExtensionContext): void => {
         "-n",
         document.fileName,
       ]);
-      var d = zshOutputToDiagnostics(document, result.stderr);
+      const d = zshOutputToDiagnostics(document, result.stderr);
+      diagnostics.set(document.uri, d);
+    } else if (isSavedShebangShDocument(document)) {
+      // if we see #!/bin/sh, it will be run by sh, not bash.
+      // Check sh syntax instead - this is a common gotcha.
+      const result = await runInWorkspace(workspaceFolder, [
+        "sh",
+        "-n",
+        document.fileName,
+      ]);
+      const d = shOutputToDiagnostics(document, result.stderr);
       diagnostics.set(document.uri, d);
     } else if (isSavedShellDocument(document)) {
-      // Assume all other shell scripts = bash.
-      // This isn't correct, but a lot of .sh files ARE bash.
-      // And the existence of POSIX sh is rapidly becoming a piece of arcana
+      // Compromise: assume all other shell scripts = bash.
+
+      // e.g. file.sh will be parsed as bash.
+
+      // This is because a lot of people have .sh files that actually
+      // *are* bash, but they don't signal this accurately through file
+      // extensions or shebangs.
 
       const result = await runInWorkspace(workspaceFolder, [
         "bash",
         "-n",
         document.fileName,
       ]);
-      var d = bashOutputToDiagnostics(document, result.stderr);
+      const d = bashOutputToDiagnostics(document, result.stderr);
       diagnostics.set(document.uri, d);
     }
   };
@@ -127,6 +141,27 @@ const zshOutputToDiagnostics = (
   return diagnostics;
 };
 
+const shOutputToDiagnostics = (
+  document: TextDocument,
+  output: string,
+): Array<Diagnostic> => {
+  const diagnostics: Array<Diagnostic> = [];
+  // /home/brian/vscode-shell-syntax/sample.sh: 5: Syntax error: "fi" unexpected
+  const matches = getMatches(/^(.+): (\d+): (.+)$/, output);
+  for (const match of matches) {
+    const lineNumber = Number.parseInt(match[2]);
+    const message = match[3];
+
+    const range = document.validateRange(
+      new Range(lineNumber - 1, 0, lineNumber - 1, Number.MAX_VALUE),
+    );
+    const diagnostic = new Diagnostic(range, message);
+    diagnostic.source = "sh";
+    diagnostics.push(diagnostic);
+  }
+  return diagnostics;
+};
+
 /**
  * Whether a given document is saved to disk and in shell language.
  *
@@ -144,12 +179,6 @@ const isSavedShellDocument = (document: TextDocument): boolean =>
       document,
     );
 
-/**
- * Whether a given document is saved to disk and in zsh language.
- *
- * @param document The document to check
- * @return Whether the document is a bash document saved to disk
- */
 const isSavedZshDocument = (document: TextDocument): boolean => {
   if (!isSavedShellDocument(document)) {
     return false;
@@ -182,7 +211,24 @@ const isSavedZshDocument = (document: TextDocument): boolean => {
 
   return false;
 };
+const isSavedShebangShDocument = (document: TextDocument): boolean => {
+  if (!isSavedShellDocument(document)) {
+    return false;
+  }
 
+  // #!/usr/bin/sh
+  const firstTextLine = document.lineAt(0);
+  const textRange = new Range(
+    firstTextLine.range.start,
+    firstTextLine.range.end,
+  );
+  const firstLine = document.getText(textRange);
+  if (firstLine.match(/^#!.*\b(sh)\b.*/)) {
+    return true;
+  }
+
+  return false;
+};
 /**
  * A system error, i.e. an error that results from a syscall.
  */
