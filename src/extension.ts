@@ -1,14 +1,12 @@
 "use strict";
 
 import { execFile } from "child_process";
-import { homedir } from "os";
 import * as vscode from "vscode";
 import {
   Diagnostic,
   ExtensionContext,
   Range,
   TextDocument,
-  Uri,
   WorkspaceFolder,
 } from "vscode";
 
@@ -37,20 +35,27 @@ const startLinting = (context: ExtensionContext): void => {
   context.subscriptions.push(diagnostics);
 
   const lint = async (document: TextDocument) => {
-    if (isSavedBashDocument(document)) {
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-      try {
-        const result = await runInWorkspace(workspaceFolder, [
-          "bash",
-          "-n",
-          document.fileName,
-        ]);
-        var d = bashOutputToDiagnostics(document, result.stderr);
-      } catch (error) {
-        vscode.window.showErrorMessage(error.toString());
-        diagnostics.delete(document.uri);
-        return;
-      }
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+
+    if (isSavedZshDocument(document)) {
+      const result = await runInWorkspace(workspaceFolder, [
+        "zsh",
+        "-n",
+        document.fileName,
+      ]);
+      var d = zshOutputToDiagnostics(document, result.stderr);
+      diagnostics.set(document.uri, d);
+    } else if (isSavedShellDocument(document)) {
+      // Assume all other shell scripts = bash.
+      // This isn't correct, but a lot of .sh files ARE bash.
+      // And the existence of POSIX sh is rapidly becoming a piece of arcana
+
+      const result = await runInWorkspace(workspaceFolder, [
+        "bash",
+        "-n",
+        document.fileName,
+      ]);
+      var d = bashOutputToDiagnostics(document, result.stderr);
       diagnostics.set(document.uri, d);
     }
   };
@@ -95,13 +100,40 @@ const bashOutputToDiagnostics = (
 };
 
 /**
- * Whether a given document is saved to disk and in bash language.
+ * Parse bash errors from bash output for a given document.
+ *
+ * @param document The document to whose contents errors refer
+ * @param output The error output from bash.
+ * @return An array of all diagnostics
+ */
+const zshOutputToDiagnostics = (
+  document: TextDocument,
+  output: string,
+): Array<Diagnostic> => {
+  const diagnostics: Array<Diagnostic> = [];
+  // /home/brian/vscode-shell-syntax/sample.zsh:5: parse error near `fi'
+  const matches = getMatches(/^(.+):(\d+): (.+)$/, output);
+  for (const match of matches) {
+    const lineNumber = Number.parseInt(match[2]);
+    const message = match[3];
+
+    const range = document.validateRange(
+      new Range(lineNumber - 1, 0, lineNumber - 1, Number.MAX_VALUE),
+    );
+    const diagnostic = new Diagnostic(range, message);
+    diagnostic.source = "zsh";
+    diagnostics.push(diagnostic);
+  }
+  return diagnostics;
+};
+
+/**
+ * Whether a given document is saved to disk and in shell language.
  *
  * @param document The document to check
- * @return Whether the document is a bash document saved to disk
+ * @return Whether the document is a shell document saved to disk
  */
-// TODO: support bash vs zsh
-const isSavedBashDocument = (document: TextDocument): boolean =>
+const isSavedShellDocument = (document: TextDocument): boolean =>
   !document.isDirty &&
   0 <
     vscode.languages.match(
@@ -113,12 +145,43 @@ const isSavedBashDocument = (document: TextDocument): boolean =>
     );
 
 /**
- * Expand a leading tilde to $HOME in the given path.
+ * Whether a given document is saved to disk and in zsh language.
  *
- * @param path The path to expand
+ * @param document The document to check
+ * @return Whether the document is a bash document saved to disk
  */
-const expandUser = (path: string): Uri =>
-  Uri.file(path.replace(/^~($|\/|\\)/, `${homedir()}$1`));
+const isSavedZshDocument = (document: TextDocument): boolean => {
+  if (!isSavedShellDocument(document)) {
+    return false;
+  }
+
+  // .zshrc
+  const extensions = [
+    ".zsh",
+    ".zshrc",
+    ".zprofile",
+    ".zlogin",
+    ".zlogout",
+    ".zshenv",
+    ".zsh-theme",
+  ];
+  if (extensions.some((extension) => document.fileName.endsWith(extension))) {
+    return true;
+  }
+
+  // #!/usr/bin/zsh
+  const firstTextLine = document.lineAt(0);
+  const textRange = new Range(
+    firstTextLine.range.start,
+    firstTextLine.range.end,
+  );
+  const firstLine = document.getText(textRange);
+  if (firstLine.match(/^#!.*\b(zsh).*/)) {
+    return true;
+  }
+
+  return false;
+};
 
 /**
  * A system error, i.e. an error that results from a syscall.
