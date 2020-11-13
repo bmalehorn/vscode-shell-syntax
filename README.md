@@ -3,7 +3,7 @@
 [![version number](https://vsmarketplacebadge.apphb.com/version-short/bmalehorn.shell-syntax.svg)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
 [![install count](https://vsmarketplacebadge.apphb.com/installs-short/bmalehorn.shell-syntax.svg)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
 
-Adds a linter for shell scripts that highlights syntax errors:
+Adds a linter for shell scripts that highlights syntax errors on save:
 
 ![live demo](demo.gif)
 
