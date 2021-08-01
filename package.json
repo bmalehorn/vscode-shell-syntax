@@ -7,7 +7,7 @@
   "repository": {
     "url": "https://github.com/bmalehorn/vscode-shell-syntax"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "engines": {
     "vscode": "^1.46.0"
   },
@@ -27,6 +27,22 @@
   "activationEvents": [
     "onLanguage:shellscript"
   ],
+  "contributes": {
+    "configuration": {
+      "properties": {
+        "shell-syntax.defaultShell": {
+          "type": "string",
+          "default": "bash",
+          "description": "Which language to lint on, if no extension or #! detected",
+          "enum": [
+            "bash",
+            "zsh",
+            "sh"
+          ]
+        }
+      }
+    }
+  },
   "main": "./out/extension.js",
   "scripts": {
     "vscode:prepublish": "yarn run compile",

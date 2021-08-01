@@ -10,73 +10,29 @@ import {
   WorkspaceFolder,
 } from "vscode";
 
+let diagnostics: vscode.DiagnosticCollection;
+
 /**
  * Activate this extension.
- *
- * Install a formatter for fish files using fish_indent, and start linting fish
- * files for syntax errors.
- *
- * Initialization fails if Fish is not installed.
  *
  * @param context The context for this extension
  * @return A promise for the initialization
  */
 export const activate = async (context: ExtensionContext): Promise<any> => {
-  startLinting(context);
-};
-
-/**
- * Start linting Fish documents.
- *
- * @param context The extension context
- */
-const startLinting = (context: ExtensionContext): void => {
-  const diagnostics = vscode.languages.createDiagnosticCollection("bash");
+  diagnostics = vscode.languages.createDiagnosticCollection("bash");
   context.subscriptions.push(diagnostics);
 
-  const lint = async (document: TextDocument) => {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-
-    if (isSavedZshDocument(document)) {
-      const result = await runInWorkspace(workspaceFolder, [
-        "zsh",
-        "-n",
-        document.fileName,
-      ]);
-      const d = zshOutputToDiagnostics(document, result.stderr);
-      diagnostics.set(document.uri, d);
-    } else if (isSavedShebangShDocument(document)) {
-      // if we see #!/bin/sh, it will be run by sh, not bash.
-      // Check sh syntax instead - this is a common gotcha.
-      const result = await runInWorkspace(workspaceFolder, [
-        "sh",
-        "-n",
-        document.fileName,
-      ]);
-      const d = shOutputToDiagnostics(document, result.stderr);
-      diagnostics.set(document.uri, d);
-    } else if (isSavedShellDocument(document)) {
-      // Compromise: assume all other shell scripts = bash.
-
-      // e.g. file.sh will be parsed as bash.
-
-      // This is because a lot of people have .sh files that actually
-      // *are* bash, but they don't signal this accurately through file
-      // extensions or shebangs.
-
-      const result = await runInWorkspace(workspaceFolder, [
-        "bash",
-        "-n",
-        document.fileName,
-      ]);
-      const d = bashOutputToDiagnostics(document, result.stderr);
-      diagnostics.set(document.uri, d);
-    }
-  };
-
-  vscode.workspace.onDidOpenTextDocument(lint, null, context.subscriptions);
-  vscode.workspace.onDidSaveTextDocument(lint, null, context.subscriptions);
-  vscode.workspace.textDocuments.forEach(lint);
+  vscode.workspace.onDidOpenTextDocument(
+    lintDocument,
+    null,
+    context.subscriptions,
+  );
+  vscode.workspace.onDidSaveTextDocument(
+    lintDocument,
+    null,
+    context.subscriptions,
+  );
+  vscode.workspace.textDocuments.forEach(lintDocument);
 
   // Remove diagnostics for closed files
   vscode.workspace.onDidCloseTextDocument(
@@ -84,6 +40,65 @@ const startLinting = (context: ExtensionContext): void => {
     null,
     context.subscriptions,
   );
+};
+
+const lintDocument = async (document: TextDocument) => {
+  const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+
+  const format = shellType(document);
+
+  if (format === "bash") {
+    const result = await runInWorkspace(workspaceFolder, [
+      "bash",
+      "-n",
+      document.fileName,
+    ]);
+    const d = bashOutputToDiagnostics(document, result.stderr);
+    diagnostics.set(document.uri, d);
+  } else if (format === "zsh") {
+    const result = await runInWorkspace(workspaceFolder, [
+      "zsh",
+      "-n",
+      document.fileName,
+    ]);
+    const d = zshOutputToDiagnostics(document, result.stderr);
+    diagnostics.set(document.uri, d);
+  } else if (format === "sh") {
+    const result = await runInWorkspace(workspaceFolder, [
+      "sh",
+      "-n",
+      document.fileName,
+    ]);
+    const d = shOutputToDiagnostics(document, result.stderr);
+    diagnostics.set(document.uri, d);
+  }
+};
+
+const shellType = (
+  document: TextDocument,
+): undefined | "bash" | "zsh" | "sh" => {
+  if (isSavedShebangBashDocument(document)) {
+    return "bash";
+  } else if (isSavedZshDocument(document)) {
+    return "zsh";
+  } else if (isSavedShebangShDocument(document)) {
+    // if we see #!/bin/sh, it will be run by sh, not bash.
+    // Check sh syntax instead - this is a common gotcha.
+    return "sh";
+  } else if (isSavedShellDocument(document)) {
+    const defaultShell = vscode.workspace
+      .getConfiguration("shell-syntax")
+      .get<"bash" | "zsh" | "sh">("defaultShell");
+    // Compromise: assume all other shell scripts = bash.
+
+    // e.g. file.sh will be parsed as bash.
+
+    // This is because a lot of people have .sh files that actually
+    // *are* bash, but they don't signal this accurately through file
+    // extensions or shebangs.
+
+    return defaultShell || "bash";
+  }
 };
 
 /**
@@ -147,10 +162,10 @@ const shOutputToDiagnostics = (
 ): Array<Diagnostic> => {
   const diagnostics: Array<Diagnostic> = [];
   // /home/brian/vscode-shell-syntax/sample.sh: 5: Syntax error: "fi" unexpected
-  const matches = getMatches(/^(.+): (\d+): (.+)$/, output);
+  const matches = getMatches(/^(.+): *(line)? *(\d+): (.+)$/, output);
   for (const match of matches) {
-    const lineNumber = Number.parseInt(match[2]);
-    const message = match[3];
+    const lineNumber = Number.parseInt(match[3]);
+    const message = match[4];
 
     const range = document.validateRange(
       new Range(lineNumber - 1, 0, lineNumber - 1, Number.MAX_VALUE),
@@ -178,6 +193,36 @@ const isSavedShellDocument = (document: TextDocument): boolean =>
       },
       document,
     );
+
+const isSavedShebangBashDocument = (document: TextDocument): boolean => {
+  if (!isSavedShellDocument(document)) {
+    return false;
+  }
+
+  const suffixes = [
+    ".bashrc",
+    "bashrc",
+    ".bash_login",
+    ".bash_logout",
+    ".bash_profile",
+  ];
+  if (suffixes.some((suffix) => document.fileName.endsWith(suffix))) {
+    return true;
+  }
+
+  // #!/bin/bash
+  const firstTextLine = document.lineAt(0);
+  const textRange = new Range(
+    firstTextLine.range.start,
+    firstTextLine.range.end,
+  );
+  const firstLine = document.getText(textRange);
+  if (firstLine.match(/^#!.*\b(bash)\b.*/)) {
+    return true;
+  }
+
+  return false;
+};
 
 const isSavedZshDocument = (document: TextDocument): boolean => {
   if (!isSavedShellDocument(document)) {
@@ -211,6 +256,7 @@ const isSavedZshDocument = (document: TextDocument): boolean => {
 
   return false;
 };
+
 const isSavedShebangShDocument = (document: TextDocument): boolean => {
   if (!isSavedShellDocument(document)) {
     return false;
@@ -229,6 +275,7 @@ const isSavedShebangShDocument = (document: TextDocument): boolean => {
 
   return false;
 };
+
 /**
  * A system error, i.e. an error that results from a syscall.
  */
