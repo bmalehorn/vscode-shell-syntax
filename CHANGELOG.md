@@ -1,6 +1,10 @@
 # Change Log
 
-## 1.0.12 (2021-07-31)
+# 1.0.3 (2021-08-17)
+
+- in remote dev environments, tell VSCode it must run in the remote environment
+
+## 1.0.2 (2021-07-31)
 
 - add `shell-syntax.defaultShell` to set shell when no extension / shebang detected
 - improve autodetection of bash scripts
