@@ -1,7 +1,7 @@
 # VSCode Shell Syntax
 
-[![version number](https://vsmarketplacebadge.apphb.com/version-short/bmalehorn.shell-syntax.svg)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
-[![install count](https://vsmarketplacebadge.apphb.com/installs-short/bmalehorn.shell-syntax.svg)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
+[![version number](https://img.shields.io/visual-studio-marketplace/v/bmalehorn.shell-syntax)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
+[![install count](https://img.shields.io/visual-studio-marketplace/i/bmalehorn.shell-syntax)](https://marketplace.visualstudio.com/items?itemName=bmalehorn.shell-syntax)
 
 Adds a linter for shell scripts that highlights syntax errors on save:
 
