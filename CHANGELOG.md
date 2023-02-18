@@ -1,5 +1,9 @@
 # Change Log
 
+# 1.0.4 (2023-02-17)
+
+- Update badge URLs
+
 # 1.0.3 (2021-08-17)
 
 - in remote dev environments, tell VSCode it must run in the remote environment
